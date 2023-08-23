@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 void main() {
   runApp(const MyApp());
@@ -25,9 +26,10 @@ class MyApp extends StatelessWidget {
 }
 
 class Contact {
+  final String id;
   final String name;
 
-  const Contact({required this.name});
+  Contact({required this.name}) : id = const Uuid().v4();
 }
 
 /// Singleton of ContactBook (One instance of class in entire application)
@@ -37,27 +39,32 @@ class Contact {
  * For example, a factory constructor might return an instance from a cache, or it might return an instance of a subtype.
  * Another use case for factory constructors is initializing a final variable using logic that can’t be handled in the initializer list.
  */
-class ContactBook {
-  ContactBook._sharedInstance();
+/// extended value notifier with what type of value you want to notified with constructor with empty value
+class ContactBook extends ValueNotifier<List<Contact>>{
+  ContactBook._sharedInstance() : super([]);
 
   static final ContactBook _shared = ContactBook._sharedInstance();
 
   factory ContactBook() => _shared;
 
-  final List<Contact> _contacts = [const Contact(name: "foo")];
-
-  int get length => _contacts.length;
+  int get length => value.length;
 
   void add({required Contact contact}) {
-    _contacts.add(contact);
+    final contacts = value;
+    contacts.add(contact);
+    notifyListeners();
   }
 
   void remove({required Contact contact}) {
-    _contacts.remove(contact);
+    final contacts = value;
+    if(contacts.contains(contact)) {
+      contacts.remove(contact);
+      notifyListeners();
+    }
   }
 
   Contact? contact({required int atIndex}) =>
-      _contacts.length > atIndex ? _contacts[atIndex] : null;
+      value.length > atIndex ? value[atIndex] : null;
 }
 
 class HomePage extends StatelessWidget {
@@ -65,19 +72,34 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final contactBook = ContactBook();
     return Scaffold(
       appBar: AppBar(
         title: const Text("HomePage"),
       ),
-      body: ListView.builder(
-          itemCount: contactBook.length,
-          itemBuilder: (context, index) {
-            final contact = contactBook.contact(atIndex: index)!;
-            return ListTile(
-              title: Text(contact.name),
-            );
-          }),
+      body: ValueListenableBuilder(
+        valueListenable: ContactBook(),
+        builder: (context, value, child) {
+          final contacts = value;
+          return ListView.builder(
+              itemCount: contacts.length,
+              itemBuilder: (context, index) {
+                final contact = contacts[index];
+                return Dismissible(
+                  key: ValueKey(contact.id),
+                  onDismissed: (direction) {
+                    ContactBook().remove(contact: contact);
+                  },
+                  child: Material(
+                    color: Colors.white,
+                    elevation: 6.0,
+                    child: ListTile(
+                      title: Text(contact.name),
+                    ),
+                  ),
+                );
+              });
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           await Navigator.of(context).pushNamed("/new-contact");
@@ -124,8 +146,8 @@ class _NewContactViewState extends State<NewContactView> {
                 hintText: "Enter a new Contact name here..."),
           ),
           TextButton(onPressed: () {
-            final _contact = Contact(name: _controller.text.toString());
-            ContactBook().add(contact: _contact);
+            final contact = Contact(name: _controller.text.toString());
+            ContactBook().add(contact: contact);
             Navigator.of(context).pop();
           }, child: const Text("Add Contact"))
         ],
